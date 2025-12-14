@@ -1,0 +1,1717 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Sistema de Asistencia Biométrico - AS608</title>
+    <script src="https://cdn.socket.io/4.6.0/socket.io.min.js"></script>
+
+    <style>
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      body {
+        font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        min-height: 100vh;
+        padding: 20px;
+      }
+      .container { max-width: 1400px; margin: 0 auto; }
+      .header { text-align: center; color: white; margin-bottom: 30px; }
+      .header h1 {
+        font-size: 2.5rem;
+        margin-bottom: 10px;
+        text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
+      }
+      .header p { font-size: 1.1rem; opacity: 0.9; }
+
+      .connection-status {
+        background: white;
+        border-radius: 15px;
+        padding: 20px;
+        margin-bottom: 20px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+        gap: 12px;
+        flex-wrap: wrap;
+      }
+      .status-item { display: flex; align-items: center; gap: 10px; }
+      .status-indicator {
+        width: 15px;
+        height: 15px;
+        border-radius: 50%;
+        animation: pulse 2s infinite;
+      }
+      .status-indicator.connected { background: #28a745; }
+      .status-indicator.disconnected { background: #dc3545; animation: none; }
+      @keyframes pulse { 0%,100%{opacity:1;} 50%{opacity:0.5;} }
+
+      .main-card {
+        background: white;
+        border-radius: 20px;
+        padding: 30px;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+        margin-bottom: 20px;
+      }
+
+      .tabs {
+        display: flex;
+        gap: 10px;
+        margin-bottom: 30px;
+        border-bottom: 2px solid #e0e0e0;
+        flex-wrap: wrap;
+        align-items: center;
+      }
+      .tab {
+        padding: 15px 30px;
+        background: none;
+        border: none;
+        font-size: 1.1rem;
+        cursor: pointer;
+        color: #666;
+        border-bottom: 3px solid transparent;
+        transition: all 0.3s;
+        font-weight: 500;
+      }
+      .tab:hover { color: #667eea; }
+      .tab.active { color: #667eea; border-bottom-color: #667eea; }
+
+      .tab-content { display: none; }
+      .tab-content.active { display: block; animation: fadeIn 0.3s; }
+      @keyframes fadeIn {
+        from { opacity: 0; transform: translateY(10px); }
+        to { opacity: 1; transform: translateY(0); }
+      }
+
+      .form-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+        gap: 20px;
+        margin-bottom: 25px;
+      }
+      .form-group { display: flex; flex-direction: column; }
+      .form-group label { margin-bottom: 8px; color: #333; font-weight: 500; }
+      .form-group label span.required { color: #dc3545; }
+      .form-group input, .form-group select, .form-group textarea {
+        padding: 12px;
+        border: 2px solid #e0e0e0;
+        border-radius: 8px;
+        font-size: 1rem;
+        transition: border-color 0.3s;
+        font-family: inherit;
+      }
+      .form-group input:focus, .form-group select:focus, .form-group textarea:focus {
+        outline: none;
+        border-color: #667eea;
+      }
+
+      .hint {
+        margin-top: 6px;
+        font-size: .9rem;
+        color: #666;
+      }
+
+      .fingerprint-scanner {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        padding: 30px;
+        background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+        border-radius: 15px;
+        margin: 20px 0;
+      }
+      .fingerprint-display {
+        width: 200px; height: 200px;
+        border: 4px solid #667eea;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: white;
+        position: relative;
+        cursor: pointer;
+        transition: all 0.3s;
+      }
+      .fingerprint-display:hover {
+        transform: scale(1.05);
+        box-shadow: 0 10px 30px rgba(102, 126, 234, 0.3);
+      }
+      .fingerprint-display.scanning { animation: pulse-scan 1.5s infinite; }
+      @keyframes pulse-scan {
+        0%,100% { box-shadow: 0 0 0 0 rgba(102,126,234,0.7); }
+        50% { box-shadow: 0 0 0 20px rgba(102,126,234,0); }
+      }
+      .fingerprint-icon { font-size: 80px; color: #667eea; }
+      .scanner-status {
+        margin-top: 20px;
+        font-size: 1.1rem;
+        font-weight: 500;
+        color: #333;
+        text-align: center;
+      }
+
+      .btn {
+        padding: 15px 40px;
+        font-size: 1.1rem;
+        border: none;
+        border-radius: 10px;
+        cursor: pointer;
+        font-weight: 600;
+        transition: all 0.3s;
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+        justify-content: center;
+      }
+      .btn-primary { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; }
+      .btn-primary:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 10px 25px rgba(102,126,234,0.4); }
+      .btn-success { background: #28a745; color: white; }
+      .btn-success:hover:not(:disabled) { background: #218838; }
+      .btn-danger { background: #dc3545; color: white; }
+      .btn-danger:hover:not(:disabled) { background: #c82333; }
+      .btn-secondary { background: #6c757d; color: white; }
+      .btn-secondary:hover:not(:disabled) { background: #5a6268; }
+      .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+      .btn-group { display: flex; gap: 10px; flex-wrap: wrap; }
+
+      .alert {
+        padding: 15px 20px;
+        border-radius: 10px;
+        margin: 20px 0;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        font-weight: 500;
+        animation: slideIn 0.3s;
+      }
+      @keyframes slideIn { from{transform:translateY(-20px); opacity:0;} to{transform:translateY(0); opacity:1;} }
+      .alert-success { background: #d4edda; color: #155724; border: 2px solid #c3e6cb; }
+      .alert-error { background: #f8d7da; color: #721c24; border: 2px solid #f5c6cb; }
+      .alert-warning { background: #fff3cd; color: #856404; border: 2px solid #ffeaa7; }
+      .alert-info { background: #d1ecf1; color: #0c5460; border: 2px solid #bee5eb; }
+
+      .users-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+        gap: 20px;
+        margin-top: 20px;
+      }
+      .user-card {
+        background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+        border-radius: 15px;
+        padding: 20px;
+        transition: all 0.3s;
+        position: relative;
+      }
+      .user-card:hover { transform: translateY(-5px); box-shadow: 0 10px 25px rgba(0,0,0,0.15); }
+      .user-card h3 { color: #333; margin-bottom: 15px; font-size: 1.3rem; }
+      .user-card p { margin: 8px 0; color: #666; }
+      .user-card-actions { display: flex; gap: 10px; margin-top: 15px; }
+      .user-card-actions button { flex: 1; padding: 10px; font-size: 0.9rem; }
+      .user-fingerprint {
+        display: inline-block;
+        background: #667eea;
+        color: white;
+        padding: 5px 15px;
+        border-radius: 20px;
+        font-size: 0.85rem;
+        margin-top: 10px;
+      }
+
+      .activity-selector { display: flex; flex-wrap: wrap; gap: 15px; margin: 20px 0; }
+      .activity-btn {
+        padding: 12px 25px;
+        border: 2px solid #667eea;
+        background: white;
+        color: #667eea;
+        border-radius: 10px;
+        cursor: pointer;
+        font-weight: 600;
+        transition: all 0.3s;
+      }
+      .activity-btn:hover { transform: translateY(-2px); box-shadow: 0 5px 15px rgba(102,126,234,0.3); }
+      .activity-btn.active { background: #667eea; color: white; }
+
+      .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; margin-bottom: 30px; }
+      .stat-card {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        padding: 25px;
+        border-radius: 15px;
+        text-align: center;
+        box-shadow: 0 5px 15px rgba(102,126,234,0.3);
+      }
+      .stat-card h3 { font-size: 2.5rem; margin-bottom: 10px; }
+      .stat-card p { font-size: 1rem; opacity: 0.9; }
+
+      .attendance-list { max-height: 600px; overflow-y: auto; }
+      .attendance-item {
+        background: #f8f9fa;
+        padding: 15px;
+        border-radius: 10px;
+        margin-bottom: 10px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+      .attendance-item-info { display: flex; flex-direction: column; gap: 5px; }
+      .attendance-item-name { font-weight: 600; color: #333; }
+      .attendance-item-activity { color: #666; font-size: 0.9rem; }
+      .attendance-item-time { color: #999; font-size: 0.9rem; }
+
+      .empty-state { text-align: center; padding: 60px 20px; color: #999; }
+      .empty-state-icon { font-size: 80px; margin-bottom: 20px; }
+
+      .modal {
+        display: none;
+        position: fixed;
+        z-index: 1000;
+        left: 0; top: 0;
+        width: 100%; height: 100%;
+        background-color: rgba(0, 0, 0, 0.5);
+        animation: fadeIn 0.3s;
+      }
+      .modal.active { display: flex; align-items: center; justify-content: center; }
+      .modal-content {
+        background: white;
+        padding: 30px;
+        border-radius: 20px;
+        max-width: 600px;
+        width: 90%;
+        max-height: 90vh;
+        overflow-y: auto;
+        animation: slideUp 0.3s;
+      }
+      @keyframes slideUp { from{transform:translateY(50px); opacity:0;} to{transform:translateY(0); opacity:1;} }
+      .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+      .modal-header h2 { color: #333; }
+      .modal-close { background: none; border: none; font-size: 2rem; cursor: pointer; color: #999; transition: color 0.3s; }
+      .modal-close:hover { color: #333; }
+
+      .console-log {
+        background: #1e1e1e;
+        color: #00ff00;
+        padding: 20px;
+        border-radius: 10px;
+        font-family: "Courier New", monospace;
+        font-size: 0.9rem;
+        max-height: 400px;
+        overflow-y: auto;
+        margin-top: 20px;
+      }
+      .console-log-item { margin-bottom: 5px; word-break: break-all; }
+      .console-log-item.error { color: #ff6b6b; }
+      .console-log-item.success { color: #51cf66; }
+      .console-log-item.warning { color: #ffd93d; }
+
+      .app-locked {
+        filter: blur(2px);
+        pointer-events: none;
+        user-select: none;
+        opacity: 0.75;
+      }
+
+      @media (max-width: 768px) {
+        .header h1 { font-size: 1.8rem; }
+        .tabs { overflow-x: auto; }
+        .tab { padding: 12px 20px; font-size: 1rem; }
+        .form-grid { grid-template-columns: 1fr; }
+        .users-grid { grid-template-columns: 1fr; }
+        .stats-grid { grid-template-columns: repeat(2, 1fr); }
+        .connection-status { flex-direction: column; gap: 15px; }
+      }
+    </style>
+  </head>
+
+  <body>
+    <div class="container" id="app-root">
+      <div class="header">
+        <h1>🔒 Sistema de Asistencia Biométrico</h1>
+        <p>Sensor AS608 + Arduino Uno + MySQL</p>
+      </div>
+
+      <div class="connection-status">
+        <div class="status-item">
+          <div class="status-indicator" id="arduino-status"></div>
+          <div>
+            <strong>Arduino + AS608</strong>
+            <p id="arduino-status-text" style="font-size: 0.9rem; color: #666">Desconectado</p>
+          </div>
+        </div>
+
+        <div class="status-item">
+          <div class="status-indicator" id="bridge-status"></div>
+          <div>
+            <strong>Bridge Service</strong>
+            <p id="bridge-status-text" style="font-size: 0.9rem; color: #666">Desconectado</p>
+          </div>
+        </div>
+
+        <div class="status-item">
+          <div class="status-indicator" id="api-status"></div>
+          <div>
+            <strong>API MySQL</strong>
+            <p id="api-status-text" style="font-size: 0.9rem; color: #666">Verificando...</p>
+          </div>
+        </div>
+
+        <div class="btn-group">
+          <button class="btn btn-secondary" onclick="showConsoleModal()">📊 Ver Consola</button>
+          <button class="btn btn-secondary" id="btn-login" onclick="openLoginModal()">🔑 Ingresar</button>
+          <button class="btn btn-danger" id="btn-logout" onclick="logout()" style="display: none">🚪 Salir</button>
+        </div>
+      </div>
+
+      <div class="main-card" id="main-app">
+        <div class="tabs" id="tabs-bar">
+          <button class="tab active" onclick="switchTab('registro')">➕ Registrar Usuario</button>
+          <button class="tab" onclick="switchTab('asistencia')">✅ Marcar Asistencia</button>
+          <button class="tab" onclick="switchTab('usuarios')">👥 Usuarios (<span id="user-count">0</span>)</button>
+          <button class="tab" onclick="switchTab('estadisticas')">📊 Estadísticas</button>
+          <button class="tab" onclick="switchTab('configuracion')">⚙️ Configuración</button>
+        </div>
+
+        <div id="alert-container"></div>
+
+        <div id="registro" class="tab-content active">
+          <h2 style="margin-bottom: 20px">Registrar Nuevo Usuario</h2>
+
+          <form id="form-registro" onsubmit="return false;">
+            <div class="form-grid">
+              <div class="form-group">
+                <label>Nombre <span class="required">*</span></label>
+                <input type="text" id="nombre" required />
+              </div>
+              <div class="form-group">
+                <label>Apellido <span class="required">*</span></label>
+                <input type="text" id="apellido" required />
+              </div>
+              <div class="form-group">
+                <label>Lugar <span class="required">*</span></label>
+                <input type="text" id="lugar" placeholder="Ej: Lima, Perú" required />
+              </div>
+              <div class="form-group">
+                <label>Clases</label>
+                <input type="text" id="clases" placeholder="Opcional" />
+              </div>
+              <div class="form-group">
+                <label>Religión</label>
+                <input type="text" id="religion" placeholder="Opcional" />
+              </div>
+
+              <div class="form-group">
+                <label>ID de Huella (1-127) <span class="required">*</span></label>
+                <input type="number" id="fingerprint-id" min="1" max="127" value="1" required />
+                <div class="hint" id="finger-id-hint">
+                  Se autoselecciona el primer ID libre según la base de datos.
+                </div>
+              </div>
+
+              <div class="form-group">
+                <label>Usuario Login (opcional)</label>
+                <input type="text" id="usuario_login" placeholder="Ej: ruberth01" />
+              </div>
+              <div class="form-group">
+                <label>Contraseña (opcional)</label>
+                <input type="password" id="password" placeholder="••••••••" />
+              </div>
+            </div>
+
+            <div class="fingerprint-scanner">
+              <div class="fingerprint-display" id="fingerprint-scanner-registro" onclick="startEnrollment()">
+                <div class="fingerprint-icon">👆</div>
+              </div>
+              <div class="scanner-status" id="scanner-status-registro">
+                Haz clic en el ícono para registrar la huella
+              </div>
+            </div>
+
+            <div class="btn-group">
+              <button type="button" class="btn btn-primary" onclick="startEnrollment()">
+                🔐 Registrar Huella y Usuario
+              </button>
+
+              <button type="button" class="btn btn-secondary" onclick="registerUserWithCredentialsOnly()">
+                🪪 Registrar SOLO credenciales
+              </button>
+
+              <button type="reset" class="btn btn-secondary" onclick="resetRegistroForm()">
+                🔄 Limpiar Formulario
+              </button>
+            </div>
+
+            <p style="margin-top: 12px; color:#666; font-size:.95rem;">
+              Puedes registrar con huella (AS608) y opcionalmente agregar credenciales. Si el sensor falla, usa “Registrar SOLO credenciales”.
+            </p>
+          </form>
+        </div>
+
+        <div id="asistencia" class="tab-content">
+          <h2 style="margin-bottom: 20px">Marcar Asistencia</h2>
+
+          <div style="margin-bottom: 30px">
+            <h3 style="margin-bottom: 15px">Selecciona la Actividad</h3>
+            <div class="activity-selector" id="activity-selector"></div>
+            <div
+              id="selected-activity-display"
+              style="margin-top: 15px; padding: 15px; background: #e8f4f8; border-radius: 10px; text-align: center; font-size: 1.1rem;"
+            >
+              Actividad: <strong>Ninguna seleccionada</strong>
+            </div>
+          </div>
+
+          <div class="fingerprint-scanner">
+            <div class="fingerprint-display" id="fingerprint-scanner-asistencia" onclick="startVerification()">
+              <div class="fingerprint-icon">👆</div>
+            </div>
+            <div class="scanner-status" id="scanner-status-asistencia">
+              Selecciona una actividad y haz clic para verificar tu huella
+            </div>
+          </div>
+
+          <div style="margin-top: 25px; background:#f8f9fa; padding:20px; border-radius:15px;">
+            <h3 style="margin-bottom: 10px;">🔐 Alternativa: Asistencia con Usuario y Contraseña</h3>
+            <div class="form-grid" style="margin-bottom: 10px;">
+              <div class="form-group">
+                <label>Usuario Login</label>
+                <input type="text" id="asist_login_user" placeholder="Ej: ruberth01" />
+              </div>
+              <div class="form-group">
+                <label>Contraseña</label>
+                <input type="password" id="asist_login_pass" placeholder="••••••••" />
+              </div>
+            </div>
+            <button class="btn btn-primary" onclick="registerAttendanceByCredentials()">✅ Marcar asistencia con credenciales</button>
+            <p style="margin-top:10px; color:#666; font-size:.95rem;">
+              Úsalo cuando el sensor no funcione. Requiere que el usuario tenga credenciales registradas.
+            </p>
+          </div>
+
+          <div style="margin-top: 30px">
+            <h3 style="margin-bottom: 15px">Acceso Rápido - Usuarios Registrados</h3>
+            <div class="users-grid" id="quick-access-users"></div>
+          </div>
+        </div>
+
+        <div id="usuarios" class="tab-content">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+            <h2>Usuarios Registrados</h2>
+            <button class="btn btn-primary" onclick="loadAndRenderUsers()">🔄 Actualizar Lista</button>
+          </div>
+          <div class="users-grid" id="users-list"></div>
+        </div>
+
+        <div id="estadisticas" class="tab-content">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+            <h2>Estadísticas y Reportes</h2>
+            <button class="btn btn-primary" onclick="loadStats()">🔄 Actualizar Estadísticas</button>
+          </div>
+
+          <div class="stats-grid" id="stats-grid"></div>
+
+          <h3 style="margin: 30px 0 15px 0">Asistencias por Actividad</h3>
+          <div class="stats-grid" id="activity-stats"></div>
+
+          <h3 style="margin: 30px 0 15px 0">Últimas Asistencias Registradas</h3>
+          <div class="attendance-list" id="attendance-list"></div>
+        </div>
+
+        <div id="configuracion" class="tab-content">
+          <h2 style="margin-bottom: 20px">Configuración del Sistema</h2>
+
+          <div style="background: #f8f9fa; padding: 25px; border-radius: 15px; margin-bottom: 20px;">
+            <h3 style="margin-bottom: 15px">🔌 Conexión Arduino</h3>
+            <p style="margin-bottom: 15px; color: #666">Bridge Service URL:</p>
+            <div class="form-group">
+              <input type="text" id="bridge-url" value="http://localhost:3000" style="margin-bottom: 15px" />
+            </div>
+            <button class="btn btn-primary" onclick="updateBridgeUrl()">💾 Guardar URL</button>
+          </div>
+
+          <div style="background: #f8f9fa; padding: 25px; border-radius: 15px; margin-bottom: 20px;">
+            <h3 style="margin-bottom: 15px">🗄️ Base de Datos MySQL</h3>
+            <p style="margin-bottom: 15px; color: #666">API Node URL:</p>
+            <div class="form-group">
+              <input type="text" id="api-url" value="http://localhost:3000/api.php" style="margin-bottom: 15px" />
+            </div>
+            <button class="btn btn-primary" onclick="updateApiUrl()">💾 Guardar URL</button>
+          </div>
+
+          <div style="background: #fff3cd; padding: 25px; border-radius: 15px; margin-bottom: 20px;">
+            <h3 style="margin-bottom: 15px">⚠️ Zona de Peligro</h3>
+            <p style="margin-bottom: 15px; color: #856404">Estas acciones son irreversibles</p>
+            <div class="btn-group">
+              <button class="btn btn-danger" onclick="confirmEmptyFingerprints()">🗑️ Vaciar Base de Huellas AS608</button>
+              <button class="btn btn-danger" onclick="confirmDeleteAllUsers()">🗑️ Eliminar Todos los Usuarios (MySQL)</button>
+
+            </div>
+          </div>
+
+          <div style="background: #f8f9fa; padding: 25px; border-radius: 15px">
+            <h3 style="margin-bottom: 15px">ℹ️ Información del Sistema</h3>
+            <p><strong>Versión:</strong> 1.0.0</p>
+            <p><strong>Sensor:</strong> AS608 Fingerprint</p>
+            <p><strong>Microcontrolador:</strong> Arduino Uno</p>
+            <p><strong>Base de Datos:</strong> MySQL</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="console-modal" class="modal">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h2>📊 Consola del Sistema</h2>
+          <button class="modal-close" onclick="closeConsoleModal()">×</button>
+        </div>
+        <div>
+          <button class="btn btn-secondary" onclick="clearConsole()">🗑️ Limpiar Consola</button>
+          <div class="console-log" id="console-log"></div>
+        </div>
+      </div>
+    </div>
+
+    <div id="login-modal" class="modal">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h2>🔑 Ingresar al Sistema</h2>
+          <button class="modal-close" onclick="closeLoginModal()">×</button>
+        </div>
+
+        <div id="login-alert"></div>
+
+        <form id="form-login" onsubmit="return false;">
+          <div class="form-group">
+            <label>Usuario ID <span class="required">*</span></label>
+            <input type="text" id="login-user" placeholder="Ej: admin" autocomplete="username" required />
+          </div>
+          <div class="form-group" style="margin-top: 12px">
+            <label>Contraseña <span class="required">*</span></label>
+            <input type="password" id="login-pass" placeholder="••••••••" autocomplete="current-password" required />
+          </div>
+
+          <div class="btn-group" style="margin-top: 20px">
+            <button class="btn btn-primary" onclick="login()">✅ Ingresar</button>
+            <button class="btn btn-secondary" onclick="closeLoginModal()">❌ Cancelar</button>
+          </div>
+
+          <p style="margin-top: 15px; color: #666; font-size: 0.95rem">
+            * Este login valida contra la base de datos (tabla <strong>admins</strong>).
+          </p>
+        </form>
+      </div>
+    </div>
+
+    <script>
+  // ====================================================================
+  // CONFIG
+  // ====================================================================
+  const ORIGIN = window.location.origin;
+  let BRIDGE_URL = localStorage.getItem("bridge_url") || ORIGIN;
+  let API_URL = localStorage.getItem("api_url") || ORIGIN + "/api.php";
+
+  let authToken = localStorage.getItem("auth_token") || null;
+  let authUser = JSON.parse(localStorage.getItem("auth_user") || "null");
+
+  let socket = null;
+  let users = [];
+  let activities = [];
+  let selectedActivity = null;
+  let isScanning = false;
+  let consoleMessages = [];
+
+  // ====================================================================
+  // HELPERS DE HUELLA (ID libre por BD)
+  // ====================================================================
+
+  function formatDateLocal(mysqlDate) {
+    if (!mysqlDate) return "—";
+    const d = new Date(mysqlDate);
+    return d.toLocaleString("es-PE", {
+      timeZone: "America/Lima",
+      hour12: false
+    });
+  }
+
+  function toIntSafe(v) {
+    const n = parseInt(String(v ?? "").trim(), 10);
+    return Number.isFinite(n) ? n : null;
+  }
+
+  function getUsedFingerprintIdsFromUsers() {
+    const used = new Set();
+    for (const u of users) {
+      const id = toIntSafe(u?.huella);
+      if (id && id >= 1 && id <= 127) used.add(id);
+    }
+    return used;
+  }
+
+  function findFirstFreeFingerprintId() {
+    const used = getUsedFingerprintIdsFromUsers();
+    for (let i = 1; i <= 127; i++) {
+      if (!used.has(i)) return i;
+    }
+    return null;
+  }
+
+  function setFingerprintIdToFirstFree() {
+    const input = document.getElementById("fingerprint-id");
+    const hint = document.getElementById("finger-id-hint"); // opcional en tu HTML
+    if (!input) return;
+
+    const free = findFirstFreeFingerprintId();
+    if (!free) {
+      input.value = "127";
+      if (hint) hint.textContent = "⚠️ No hay IDs libres (1–127). Borra una huella o vacía el sensor.";
+      return;
+    }
+
+    input.value = String(free);
+    if (hint) hint.textContent = `ID sugerido: ${free} (primer ID libre según BD).`;
+  }
+
+  function fingerprintIdIsFree(id) {
+    const used = getUsedFingerprintIdsFromUsers();
+    return !used.has(id);
+  }
+
+  // ====================================================================
+  // LOCK / SESSION
+  // ====================================================================
+  function isAuthed() { return !!authToken; }
+
+  function lockApp() {
+    document.getElementById("main-app").classList.add("app-locked");
+    document.getElementById("btn-login").style.display = "";
+    document.getElementById("btn-logout").style.display = "none";
+  }
+
+  function unlockApp() {
+    document.getElementById("main-app").classList.remove("app-locked");
+    document.getElementById("btn-login").style.display = "none";
+    document.getElementById("btn-logout").style.display = "";
+  }
+
+  function requireSessionOrPrompt() {
+    if (isAuthed()) return true;
+    showAlert("Debes iniciar sesión para usar el sistema", "warning");
+    openLoginModal();
+    return false;
+  }
+
+  // ====================================================================
+  // LOGIN
+  // ====================================================================
+  function openLoginModal() {
+    document.getElementById("login-modal").classList.add("active");
+    document.getElementById("login-alert").innerHTML = "";
+    setTimeout(() => document.getElementById("login-user")?.focus(), 50);
+  }
+
+  function closeLoginModal() {
+    document.getElementById("login-modal").classList.remove("active");
+  }
+
+  function setLoginAlert(msg, type = "error") {
+    const el = document.getElementById("login-alert");
+    el.innerHTML = `<div class="alert alert-${type}">${msg}</div>`;
+    setTimeout(() => { el.innerHTML = ""; }, 5000);
+  }
+
+  async function login() {
+    const usuario = document.getElementById("login-user").value.trim();
+    const password = document.getElementById("login-pass").value;
+
+    if (!usuario || !password) {
+      setLoginAlert("Completa usuario y contraseña", "warning");
+      return;
+    }
+
+    try {
+      const res = await fetch(ORIGIN + "/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ usuario, password }),
+      });
+
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.success) {
+        setLoginAlert(data.message || "Credenciales inválidas", "error");
+        return;
+      }
+
+      authToken = data.token;
+      authUser = data.user || { usuario };
+
+      localStorage.setItem("auth_token", authToken);
+      localStorage.setItem("auth_user", JSON.stringify(authUser));
+
+      unlockApp();
+      closeLoginModal();
+
+      showAlert(`✅ Bienvenido${authUser?.nombre ? ", " + authUser.nombre : ""}`, "success");
+
+      await loadActivities();
+      await loadUsers();
+      await checkApiStatus();
+
+      renderActivitySelector();
+      renderQuickAccessUsers();
+      renderUsers();
+      updateUserCount();
+
+      // sugerir ID libre
+      setFingerprintIdToFirstFree();
+
+    } catch (err) {
+      setLoginAlert("Error de conexión al autenticar", "error");
+    }
+  }
+
+  function hardLogout(reasonMsg = "Sesión cerrada") {
+    authToken = null;
+    authUser = null;
+    localStorage.removeItem("auth_token");
+    localStorage.removeItem("auth_user");
+    lockApp();
+
+    users = [];
+    activities = [];
+    selectedActivity = null;
+    updateUserCount();
+
+    ["users-list","quick-access-users","activity-selector","stats-grid","activity-stats","attendance-list"]
+      .forEach(id => { const el = document.getElementById(id); if (el) el.innerHTML = ""; });
+
+    updateSelectedActivityDisplay();
+    forceSwitchTab("registro");
+    showAlert(reasonMsg, "info");
+  }
+
+  function logout() { hardLogout("🚪 Sesión cerrada"); }
+
+  // ====================================================================
+  // INIT
+  // ====================================================================
+  async function init() {
+    addConsoleMessage("🚀 Iniciando sistema...", "info");
+
+    if (authToken) unlockApp();
+    else lockApp();
+
+    connectWebSocket();
+
+    if (authToken) {
+      await loadActivities();
+      await loadUsers();
+      await checkApiStatus();
+
+      renderActivitySelector();
+      renderQuickAccessUsers();
+      renderUsers();
+      updateUserCount();
+
+      setFingerprintIdToFirstFree();
+    } else {
+      updateConnectionStatus("api", false);
+      const apiText = document.getElementById("api-status-text");
+      if (apiText) { apiText.textContent = "Requiere login"; apiText.style.color = "#dc3545"; }
+    }
+
+    // Validar cambio manual del ID
+    const fpInput = document.getElementById("fingerprint-id");
+    if (fpInput) {
+      fpInput.addEventListener("change", () => {
+        const id = toIntSafe(fpInput.value);
+        if (!id || id < 1 || id > 127) return;
+        if (!fingerprintIdIsFree(id)) {
+          showAlert(`⚠️ El ID de huella ${id} ya está asignado a otro usuario. Se sugiere uno libre.`, "warning");
+          setFingerprintIdToFirstFree();
+        }
+      });
+    }
+
+    addConsoleMessage("✅ Sistema iniciado correctamente", "success");
+  }
+
+  // ====================================================================
+  // WEBSOCKET
+  // ====================================================================
+  function connectWebSocket() {
+    try {
+      addConsoleMessage("🔌 Conectando al Bridge Service...", "info");
+      socket = io(BRIDGE_URL);
+
+      socket.on("connect", () => {
+        addConsoleMessage("✅ Conectado al Bridge Service", "success");
+        updateConnectionStatus("bridge", true);
+      });
+
+      socket.on("disconnect", () => {
+        addConsoleMessage("❌ Desconectado del Bridge Service", "error");
+        updateConnectionStatus("bridge", false);
+        updateConnectionStatus("arduino", false);
+      });
+
+      socket.on("arduino-status", (data) => {
+        addConsoleMessage(`Arduino: ${data.message}`, data.connected ? "success" : "error");
+        updateConnectionStatus("arduino", data.connected);
+      });
+
+      socket.on("sensor-status", (data) => {
+        addConsoleMessage(`Sensor AS608: ${data.message}`, data.status === "ok" ? "success" : "error");
+      });
+
+      // Mensajes crudos del Arduino (debug + sincronización)
+      socket.on("arduino-message", (data) => {
+        const msg = String(data?.message || "");
+        addConsoleMessage(`📨 Arduino: ${msg}`, "info");
+        syncScannerStatusFromSerialMessage(msg);
+      });
+
+      // Estados “bonitos” desde server.js (recomendado)
+      socket.on("enroll-status", (data) => handleEnrollStatus(data));
+      socket.on("verify-status", (data) => handleVerifyStatus(data));
+
+      socket.on("error-message", (data) => {
+        addConsoleMessage(`❌ Error: ${data.message}`, "error");
+        showAlert(`Error: ${data.error}`, "error");
+        stopScanning();
+      });
+
+    } catch (error) {
+      addConsoleMessage(`❌ Error al conectar WebSocket: ${error.message}`, "error");
+      updateConnectionStatus("bridge", false);
+    }
+  }
+
+  // Sincroniza la UI con líneas del sketch (ENROLL:MSG / VERIFY:MSG)
+  function syncScannerStatusFromSerialMessage(msg) {
+    const regEl = document.getElementById("scanner-status-registro");
+    const asiEl = document.getElementById("scanner-status-asistencia");
+    if (!msg) return;
+
+    if (msg.includes("ENROLL:MSG:")) {
+      const text = msg.split("ENROLL:MSG:")[1]?.trim();
+      if (text && regEl) regEl.textContent = text;
+      return;
+    }
+
+    if (msg.includes("VERIFY:MSG:")) {
+      const text = msg.split("VERIFY:MSG:")[1]?.trim();
+      if (text && asiEl) asiEl.textContent = text;
+      return;
+    }
+
+    if (msg.includes("ENROLL:START") && regEl) regEl.textContent = "Iniciando registro... coloca el dedo";
+    if (msg.includes("VERIFY:START") && asiEl) asiEl.textContent = "Iniciando verificación... coloca el dedo";
+  }
+
+  // ====================================================================
+  // API REQUESTS
+  // ====================================================================
+  async function apiRequest(action, method = "GET", data = null) {
+    try {
+      const url =
+        method === "GET" && data
+          ? `${API_URL}?action=${action}&${new URLSearchParams(data).toString()}`
+          : `${API_URL}?action=${action}`;
+
+      const headers = { "Content-Type": "application/json" };
+      if (authToken) headers["Authorization"] = `Bearer ${authToken}`;
+
+      const options = { method, headers };
+      if (method === "POST" && data) options.body = JSON.stringify(data);
+
+      const response = await fetch(url, options);
+
+      if (response.status === 401) {
+        hardLogout("⚠️ Tu sesión expiró o el token es inválido. Inicia sesión otra vez.");
+        openLoginModal();
+        return null;
+      }
+
+      const result = await response.json();
+
+      if (result.error) {
+        showAlert(result.message || "Error en la operación", "error");
+        addConsoleMessage(`❌ API Error: ${result.message}`, "error");
+        return null;
+      }
+
+      return result;
+
+    } catch (error) {
+      showAlert("Error de conexión con la API", "error");
+      addConsoleMessage(`❌ API Request Error: ${error.message}`, "error");
+      return null;
+    }
+  }
+
+async function checkApiStatus() {
+  try {
+    if (!authToken) {
+      updateConnectionStatus("api", false);
+      const apiText = document.getElementById("api-status-text");
+      if (apiText) {
+        apiText.textContent = "Requiere login";
+        apiText.style.color = "#dc3545";
+      }
+      return;
+    }
+
+    // ✅ evita caché + fuerza respuesta fresca
+    const url = API_URL + "?action=get_estadisticas&_t=" + Date.now();
+
+    const response = await fetch(url, {
+      method: "GET",
+      cache: "no-store",
+      headers: {
+        "Authorization": `Bearer ${authToken}`
+      }
+    });
+
+    if (response.status === 401) {
+      hardLogout("⚠️ Tu sesión expiró. Inicia sesión nuevamente.");
+      return;
+    }
+
+    // ✅ si responde (aunque sea error de acción), el servidor está vivo
+    // pero seguimos usando tu criterio de "conectado" por success/data
+    const result = await response.json().catch(() => null);
+
+    if (result && (result.success || result.data)) {
+      updateConnectionStatus("api", true);
+      return;
+    }
+
+    // Si llegó JSON con error, deja evidencia en consola para ver el motivo real
+    if (result && result.error) {
+      console.warn("API respondió pero con error:", result.message);
+    }
+
+    updateConnectionStatus("api", false);
+
+  } catch (error) {
+    updateConnectionStatus("api", false);
+  }
+}
+
+
+  // ====================================================================
+  // BRIDGE REQUESTS
+  // ====================================================================
+  async function bridgeRequest(endpoint, method = "GET", data = null) {
+    try {
+      const url = `${BRIDGE_URL}${endpoint}`;
+      const options = { method, headers: { "Content-Type": "application/json" } };
+      if (data) options.body = JSON.stringify(data);
+
+      const response = await fetch(url, options);
+      const result = await response.json();
+      return result;
+
+    } catch (error) {
+      addConsoleMessage(`❌ Bridge Error: ${error.message}`, "error");
+      return { success: false, message: error.message };
+    }
+  }
+
+  // ====================================================================
+  // REGISTRO CON HUELLA (CON UNICIDAD) ✅
+  // ====================================================================
+  async function startEnrollment() {
+    if (!requireSessionOrPrompt()) return;
+
+    const nombre = document.getElementById("nombre").value.trim();
+    const apellido = document.getElementById("apellido").value.trim();
+    const lugar = document.getElementById("lugar").value.trim();
+    const fingerprintId = toIntSafe(document.getElementById("fingerprint-id").value);
+
+    if (!nombre || !apellido || !lugar) {
+      showAlert("Por favor completa todos los campos obligatorios", "error");
+      return;
+    }
+
+    if (!fingerprintId || fingerprintId < 1 || fingerprintId > 127) {
+      showAlert("El ID de huella debe estar entre 1 y 127", "error");
+      return;
+    }
+
+    // ID libre en BD
+    if (!fingerprintIdIsFree(fingerprintId)) {
+      showAlert(`⚠️ El ID de huella ${fingerprintId} ya está en uso. Se seleccionará un ID libre.`, "warning");
+      setFingerprintIdToFirstFree();
+      return;
+    }
+
+    if (isScanning) return;
+    isScanning = true;
+
+    const scanner = document.getElementById("fingerprint-scanner-registro");
+    const status = document.getElementById("scanner-status-registro");
+
+    scanner.classList.add("scanning");
+    status.textContent = "Iniciando registro... coloca el dedo";
+
+    addConsoleMessage(`📝 Iniciando registro de huella ID: ${fingerprintId}`, "info");
+
+    const result = await bridgeRequest("/enroll", "POST", { id: fingerprintId });
+    if (!result.success) {
+      showAlert(result.message, "error");
+      stopScanning();
+    }
+  }
+
+  function handleEnrollStatus(data) {
+    const status = document.getElementById("scanner-status-registro");
+
+    if (!data || !status) return;
+
+    if (data.status === "started") {
+      status.textContent = "Coloca tu dedo en el sensor...";
+      addConsoleMessage("👆 Esperando dedo en el sensor...", "info");
+      return;
+    }
+
+    // ✅ Mensajes guiados (servidor manda ENROLL:MSG)
+    if (data.status === "msg") {
+      status.textContent = data.message || "Sigue las instrucciones del sensor...";
+      return;
+    }
+
+    // ✅ Duplicado (mismo dedo ya existe en el sensor)
+    if (data.status === "duplicate") {
+      const fid = data.fingerId != null ? ` (ID existente: ${data.fingerId})` : "";
+      showAlert(`❌ Esta huella ya está registrada en el sensor${fid}. Usa otro dedo.`, "error");
+      addConsoleMessage(`❌ Huella duplicada detectada${fid}`, "error");
+      stopScanning();
+      return;
+    }
+
+    // ✅ Error general durante enroll
+    if (data.status === "error") {
+      showAlert(`❌ Error al registrar huella: ${data.message || "Error del sensor"}`, "error");
+      addConsoleMessage(`❌ ENROLL error: ${data.message || "Error"}`, "error");
+      stopScanning();
+      return;
+    }
+
+    if (data.status === "success") {
+      status.textContent = "¡Huella registrada! Guardando en base de datos...";
+      addConsoleMessage(`✅ Huella ${data.id} registrada en AS608`, "success");
+      saveUserToDatabase(data.id);
+      return;
+    }
+  }
+
+  async function saveUserToDatabase(fingerprintId) {
+    const nombre = document.getElementById("nombre").value.trim();
+    const apellido = document.getElementById("apellido").value.trim();
+    const lugar = document.getElementById("lugar").value.trim();
+    const clases = document.getElementById("clases").value.trim();
+    const religion = document.getElementById("religion").value.trim();
+
+    const usuario_login = document.getElementById("usuario_login").value.trim();
+    const password = document.getElementById("password").value;
+
+    // Reforzar unicidad antes de guardar
+    const fid = toIntSafe(fingerprintId);
+    if (fid && !fingerprintIdIsFree(fid)) {
+      stopScanning();
+      showAlert(`❌ No se puede guardar: la huella ${fid} ya está asignada a otro usuario.`, "error");
+      setFingerprintIdToFirstFree();
+      return;
+    }
+
+    const userData = {
+      nombre, apellido, lugar,
+      clases: clases || null,
+      religion: religion || null,
+      huella: fid ? String(fid) : null
+    };
+
+    if (usuario_login && password) {
+      userData.usuario_login = usuario_login;
+      userData.password = password;
+    }
+
+    if (!userData.huella && !(userData.usuario_login && userData.password)) {
+      showAlert("Debes registrar huella o credenciales (usuario y contraseña)", "error");
+      stopScanning();
+      return;
+    }
+
+    const result = await apiRequest("crear_usuario", "POST", userData);
+
+    stopScanning();
+
+    if (result && result.success) {
+      showAlert("✅ Usuario registrado exitosamente", "success");
+      addConsoleMessage(`✅ Usuario guardado en MySQL: ${nombre} ${apellido}`, "success");
+      resetRegistroForm();
+
+      await loadUsers();
+      renderUsers();
+      renderQuickAccessUsers();
+      updateUserCount();
+
+      setFingerprintIdToFirstFree();
+    } else {
+      showAlert("Error al guardar usuario en la base de datos", "error");
+    }
+  }
+
+  async function registerUserWithCredentialsOnly() {
+    if (!requireSessionOrPrompt()) return;
+
+    const nombre = document.getElementById("nombre").value.trim();
+    const apellido = document.getElementById("apellido").value.trim();
+    const lugar = document.getElementById("lugar").value.trim();
+    const clases = document.getElementById("clases").value.trim();
+    const religion = document.getElementById("religion").value.trim();
+
+    const usuario_login = document.getElementById("usuario_login").value.trim();
+    const password = document.getElementById("password").value;
+
+    if (!nombre || !apellido || !lugar) {
+      showAlert("Completa Nombre, Apellido y Lugar", "warning");
+      return;
+    }
+    if (!usuario_login || !password) {
+      showAlert("Completa usuario_login y contraseña para registrar por credenciales", "warning");
+      return;
+    }
+    if (String(usuario_login).length < 3) {
+      showAlert("El usuario_login debe tener al menos 3 caracteres", "warning");
+      return;
+    }
+    if (String(password).length < 4) {
+      showAlert("La contraseña debe tener al menos 4 caracteres", "warning");
+      return;
+    }
+
+    const userData = {
+      nombre, apellido, lugar,
+      clases: clases || null,
+      religion: religion || null,
+      huella: null,
+      usuario_login,
+      password
+    };
+
+    const result = await apiRequest("crear_usuario", "POST", userData);
+    if (result && result.success) {
+      showAlert("✅ Usuario registrado por credenciales", "success");
+      addConsoleMessage(`✅ Usuario (credenciales) guardado: ${nombre} ${apellido}`, "success");
+      resetRegistroForm();
+
+      await loadUsers();
+      renderUsers();
+      renderQuickAccessUsers();
+      updateUserCount();
+      setFingerprintIdToFirstFree();
+    }
+  }
+
+  // ====================================================================
+  // ASISTENCIA
+  // ====================================================================
+  async function startVerification() {
+    if (!requireSessionOrPrompt()) return;
+    if (!selectedActivity) {
+      showAlert("Por favor selecciona una actividad primero", "warning");
+      return;
+    }
+    if (isScanning) return;
+
+    isScanning = true;
+
+    const scanner = document.getElementById("fingerprint-scanner-asistencia");
+    const status = document.getElementById("scanner-status-asistencia");
+
+    scanner.classList.add("scanning");
+    status.textContent = "Coloca tu dedo en el sensor...";
+    addConsoleMessage("🔍 Iniciando verificación de huella...", "info");
+
+    const result = await bridgeRequest("/verify", "POST");
+    if (!result.success) {
+      showAlert(result.message, "error");
+      stopScanning();
+    }
+  }
+
+  async function handleVerifyStatus(data) {
+    const status = document.getElementById("scanner-status-asistencia");
+
+    if (!data || !status) return;
+
+    if (data.status === "started") {
+      status.textContent = "Verificando identidad...";
+      return;
+    }
+
+    if (data.status === "msg") {
+      status.textContent = data.message || "Sigue las instrucciones del sensor...";
+      return;
+    }
+
+    if (data.status === "error") {
+      showAlert(`❌ Error al verificar: ${data.message || "Error del sensor"}`, "error");
+      addConsoleMessage(`❌ VERIFY error: ${data.message || "Error"}`, "error");
+      stopScanning();
+      return;
+    }
+
+    if (data.status === "success") {
+      const fingerId = data.fingerId;
+      addConsoleMessage(`✅ Huella encontrada: ID ${fingerId} (Confianza: ${data.confidence})`, "success");
+      await registerAttendanceByFingerprint(fingerId);
+      return;
+    }
+
+    if (data.status === "not_found") {
+      showAlert("Huella no reconocida. Por favor regístrate primero.", "warning");
+      addConsoleMessage("⚠️ Huella no encontrada en el sensor", "warning");
+      stopScanning();
+      return;
+    }
+  }
+
+  async function registerAttendanceByFingerprint(fingerprintId) {
+    const result = await apiRequest("registrar_asistencia_huella", "POST", {
+      huella: String(fingerprintId),
+      actividad: selectedActivity
+    });
+
+    stopScanning();
+    if (result && result.success) {
+      showAlert(`✅ ${result.message} - ${result.usuario_nombre}`, "success");
+      addConsoleMessage(`✅ Asistencia registrada: ${result.usuario_nombre}`, "success");
+    }
+  }
+
+  async function registerAttendanceByCredentials() {
+    if (!requireSessionOrPrompt()) return;
+    if (!selectedActivity) {
+      showAlert("Selecciona una actividad primero", "warning");
+      return;
+    }
+
+    const usuario_login = document.getElementById("asist_login_user").value.trim();
+    const password = document.getElementById("asist_login_pass").value;
+
+    if (!usuario_login || !password) {
+      showAlert("Completa usuario y contraseña", "warning");
+      return;
+    }
+
+    const result = await apiRequest("registrar_asistencia_credenciales", "POST", {
+      usuario_login,
+      password,
+      actividad: selectedActivity
+    });
+
+    if (result && result.success) {
+      showAlert(`✅ ${result.message} - ${result.usuario_nombre}`, "success");
+      addConsoleMessage(`✅ Asistencia (credenciales): ${result.usuario_nombre}`, "success");
+      document.getElementById("asist_login_pass").value = "";
+    }
+  }
+
+  // ====================================================================
+  // USERS / ACTIVITIES / STATS
+  // ====================================================================
+  async function loadUsers() {
+    const result = await apiRequest("get_usuarios");
+    if (result && result.data) {
+      users = result.data;
+      addConsoleMessage(`📥 ${users.length} usuarios cargados`, "info");
+      setFingerprintIdToFirstFree();
+    }
+  }
+
+  function renderUsers() {
+    const container = document.getElementById("users-list");
+    if (!container) return;
+
+    if (users.length === 0) {
+      container.innerHTML = `
+        <div class="empty-state">
+          <div class="empty-state-icon">👤</div>
+          <p>No hay usuarios registrados</p>
+          <button class="btn btn-primary" style="margin-top: 20px;" onclick="switchTab('registro')">
+            Registrar Primer Usuario
+          </button>
+        </div>
+      `;
+      return;
+    }
+
+    container.innerHTML = users.map(user => `
+      <div class="user-card">
+        <h3>${user.nombre} ${user.apellido}</h3>
+        <p>🆔 ID: ${user.id}</p>
+        <p>📍 ${user.lugar}</p>
+        <p>📚 ${user.clases || "Sin clases"}</p>
+        <p>⛪ ${user.religion || "No especificada"}</p>
+        <span class="user-fingerprint">🔐 Huella ${user.huella ?? "N/A"}</span>
+        <p style="font-size: 0.85rem; color: #999; margin-top: 10px;">Registrado: ${formatDateLocal(user.fecha_registro)}
+</p>
+        <div class="user-card-actions">
+          <button class="btn btn-success" onclick='recordAttendance(${JSON.stringify(user)})'>✅ Marcar Asistencia</button>
+          <button class="btn btn-danger" onclick="confirmDeleteUser(${user.id}, '${user.huella}', '${user.nombre} ${user.apellido}')">🗑️ Eliminar</button>
+        </div>
+      </div>
+    `).join("");
+  }
+
+  async function loadAndRenderUsers() {
+    if (!requireSessionOrPrompt()) return;
+    showAlert("Actualizando lista de usuarios...", "info");
+    await loadUsers();
+    renderUsers();
+    renderQuickAccessUsers();
+    updateUserCount();
+    showAlert("Lista actualizada correctamente", "success");
+  }
+
+  async function recordAttendance(user) {
+    if (!requireSessionOrPrompt()) return;
+    if (!selectedActivity) {
+      showAlert("Por favor selecciona una actividad primero", "warning");
+      forceSwitchTab("asistencia");
+      return;
+    }
+
+    const result = await apiRequest("registrar_asistencia", "POST", {
+      usuario_id: user.id,
+      actividad: selectedActivity
+    });
+
+    if (result && result.success) {
+      showAlert(`✅ ${result.message} - ${result.usuario_nombre}`, "success");
+      addConsoleMessage(`✅ Asistencia registrada: ${result.usuario_nombre} - ${selectedActivity}`, "success");
+    }
+  }
+
+  async function confirmDeleteUser(userId, fingerprintId, userName) {
+    if (!requireSessionOrPrompt()) return;
+    if (!confirm(`¿Estás seguro de eliminar al usuario "${userName}"?\n\nEsto eliminará:\n- El usuario de MySQL\n- La huella ${fingerprintId} del sensor AS608`)) return;
+
+    showAlert("Eliminando usuario...", "info");
+    addConsoleMessage(`🗑️ Eliminando usuario: ${userName}`, "info");
+
+    const fid = toIntSafe(fingerprintId);
+    if (fid) {
+      const bridgeResult = await bridgeRequest("/delete", "POST", { id: fid });
+      if (bridgeResult.success) addConsoleMessage(`✅ Huella ${fid} eliminada del AS608`, "success");
+    }
+
+    showAlert(`✅ Usuario "${userName}" eliminado correctamente (pendiente eliminar en BD)`, "success");
+
+    await loadUsers();
+    renderUsers();
+    renderQuickAccessUsers();
+    updateUserCount();
+    setFingerprintIdToFirstFree();
+  }
+
+  async function loadActivities() {
+    const result = await apiRequest("get_actividades");
+    if (result && result.data) {
+      activities = result.data;
+      if (activities.length > 0) selectedActivity = activities[0];
+      addConsoleMessage(`📥 ${activities.length} actividades cargadas`, "info");
+    }
+  }
+
+  function renderActivitySelector() {
+    const container = document.getElementById("activity-selector");
+    if (!container) return;
+
+    if (activities.length === 0) {
+      container.innerHTML = '<p style="color:#999;">No hay actividades disponibles</p>';
+      return;
+    }
+
+    container.innerHTML = activities.map(a => `
+      <button class="activity-btn ${a === selectedActivity ? "active" : ""}" onclick="selectActivity('${a}')">
+        ${a}
+      </button>
+    `).join("");
+
+    updateSelectedActivityDisplay();
+  }
+
+  function selectActivity(activity) {
+    selectedActivity = activity;
+    renderActivitySelector();
+    updateSelectedActivityDisplay();
+    addConsoleMessage(`📌 Actividad seleccionada: ${activity}`, "info");
+  }
+
+  function updateSelectedActivityDisplay() {
+    const display = document.getElementById("selected-activity-display");
+    if (display) display.innerHTML = `Actividad: <strong>${selectedActivity || "Ninguna"}</strong>`;
+  }
+
+  function renderQuickAccessUsers() {
+    const container = document.getElementById("quick-access-users");
+    if (!container) return;
+
+    if (users.length === 0) {
+      container.innerHTML = `<div class="empty-state"><div class="empty-state-icon">👤</div><p>No hay usuarios registrados</p></div>`;
+      return;
+    }
+
+    container.innerHTML = users.map(user => `
+      <div class="user-card" onclick='recordAttendance(${JSON.stringify(user)})' style="cursor:pointer;">
+        <h3>${user.nombre} ${user.apellido}</h3>
+        <p>📍 ${user.lugar}</p>
+        <p>📚 ${user.clases || "Sin clases"}</p>
+        <span class="user-fingerprint">🔐 ${user.huella ?? "N/A"}</span>
+      </div>
+    `).join("");
+  }
+
+  async function loadStats() {
+    if (!requireSessionOrPrompt()) return;
+
+    showAlert("Cargando estadísticas...", "info");
+
+    const statsResult = await apiRequest("get_estadisticas");
+    const attendancesResult = await apiRequest("get_asistencias", "GET", { limit: 50 });
+
+    if (statsResult && statsResult.data) renderStats(statsResult.data);
+    if (attendancesResult && attendancesResult.data) renderAttendanceList(attendancesResult.data);
+
+    showAlert("Estadísticas actualizadas", "success");
+  }
+
+  function renderStats(stats) {
+    document.getElementById("stats-grid").innerHTML = `
+      <div class="stat-card"><h3>${stats.total_usuarios}</h3><p>Usuarios Registrados</p></div>
+      <div class="stat-card"><h3>${stats.total_asistencias}</h3><p>Asistencias Total</p></div>
+      <div class="stat-card"><h3>${stats.asistencias_hoy}</h3><p>Asistencias Hoy</p></div>
+      <div class="stat-card"><h3>${stats.actividades_registradas}</h3><p>Actividades Diferentes</p></div>
+    `;
+
+    const activityStats = document.getElementById("activity-stats");
+    if (stats.por_actividad && stats.por_actividad.length > 0) {
+      activityStats.innerHTML = stats.por_actividad.map(i => `
+        <div class="stat-card"><h3>${i.total}</h3><p>${i.actividad}</p></div>
+      `).join("");
+    } else {
+      activityStats.innerHTML = '<p style="text-align:center; color:#999;">No hay datos</p>';
+    }
+  }
+
+  function renderAttendanceList(list) {
+    const attendanceList = document.getElementById("attendance-list");
+    if (!list || list.length === 0) {
+      attendanceList.innerHTML = `<div class="empty-state"><div class="empty-state-icon">📭</div><p>No hay registros de asistencia</p></div>`;
+      return;
+    }
+    attendanceList.innerHTML = list.map(a => `
+      <div class="attendance-item">
+        <div class="attendance-item-info">
+          <span class="attendance-item-name">${a.usuario_nombre}</span>
+          <span class="attendance-item-activity">📌 ${a.actividad}</span>
+        </div>
+        <span class="attendance-item-time">🕐 ${a.fecha_hora}</span>
+      </div>
+    `).join("");
+  }
+
+  // ====================================================================
+  // TABS
+  // ====================================================================
+  function forceSwitchTab(tabName) {
+    document.querySelectorAll(".tab").forEach(tab => tab.classList.remove("active"));
+    document.querySelectorAll(".tab-content").forEach(content => content.classList.remove("active"));
+
+    document.getElementById(tabName).classList.add("active");
+
+    const tabs = Array.from(document.querySelectorAll(".tab"));
+    const btn = tabs.find(b => (b.getAttribute("onclick") || "").includes(`'${tabName}'`));
+    if (btn) btn.classList.add("active");
+  }
+
+  function switchTab(tabName) {
+    if (!isAuthed()) {
+      showAlert("Debes iniciar sesión para navegar por el sistema", "warning");
+      openLoginModal();
+      return;
+    }
+
+    document.querySelectorAll(".tab").forEach(tab => tab.classList.remove("active"));
+    document.querySelectorAll(".tab-content").forEach(content => content.classList.remove("active"));
+
+    if (event && event.target) event.target.classList.add("active");
+    document.getElementById(tabName).classList.add("active");
+
+    if (tabName === "usuarios") loadAndRenderUsers();
+    else if (tabName === "estadisticas") loadStats();
+    else if (tabName === "asistencia") renderQuickAccessUsers();
+    else if (tabName === "registro") setFingerprintIdToFirstFree();
+  }
+
+  // ====================================================================
+  // UI UTIL
+  // ====================================================================
+  function showAlert(message, type = "info") {
+    const container = document.getElementById("alert-container");
+    const alert = document.createElement("div");
+    alert.className = `alert alert-${type}`;
+    alert.textContent = message;
+
+    container.innerHTML = "";
+    container.appendChild(alert);
+
+    setTimeout(() => alert.remove(), 5000);
+  }
+
+  function updateConnectionStatus(component, connected) {
+    const indicator = document.getElementById(`${component}-status`);
+    const text = document.getElementById(`${component}-status-text`);
+    if (!indicator || !text) return;
+
+    if (connected) {
+      indicator.classList.add("connected");
+      indicator.classList.remove("disconnected");
+      text.textContent = "Conectado";
+      text.style.color = "#28a745";
+    } else {
+      indicator.classList.add("disconnected");
+      indicator.classList.remove("connected");
+      text.textContent = "Desconectado";
+      text.style.color = "#dc3545";
+    }
+  }
+
+  function stopScanning() {
+    isScanning = false;
+    document.getElementById("fingerprint-scanner-registro")?.classList.remove("scanning");
+    document.getElementById("fingerprint-scanner-asistencia")?.classList.remove("scanning");
+    const r = document.getElementById("scanner-status-registro");
+    const a = document.getElementById("scanner-status-asistencia");
+    if (r) r.textContent = "Haz clic en el ícono para registrar la huella";
+    if (a) a.textContent = "Haz clic para verificar tu huella";
+  }
+
+  function resetRegistroForm() {
+    document.getElementById("form-registro").reset();
+    stopScanning();
+    setFingerprintIdToFirstFree();
+  }
+
+  function updateUserCount() {
+    document.getElementById("user-count").textContent = users.length;
+  }
+
+  // ====================================================================
+  // CONFIG
+  // ====================================================================
+
+  
+  function updateBridgeUrl() {
+    const newUrl = document.getElementById("bridge-url").value.trim();
+    if (newUrl) {
+      BRIDGE_URL = newUrl;
+      localStorage.setItem("bridge_url", newUrl);
+      showAlert("URL del Bridge Service actualizada. Recargando...", "success");
+      setTimeout(() => location.reload(), 1500);
+    }
+  }
+
+  function updateApiUrl() {
+    const newUrl = document.getElementById("api-url").value.trim();
+    if (newUrl) {
+      API_URL = newUrl;
+      localStorage.setItem("api_url", newUrl);
+      showAlert("URL de la API actualizada. Recargando...", "success");
+      setTimeout(() => location.reload(), 1500);
+    }
+  }
+
+  async function confirmEmptyFingerprints() {
+    if (!requireSessionOrPrompt()) return;
+    if (!confirm("⚠️ ADVERTENCIA ⚠️\n\n¿Eliminar TODAS las huellas del AS608?\n\nNO se puede deshacer.")) return;
+    const result = await bridgeRequest("/empty", "POST");
+    if (result.success) showAlert("Base de huellas vaciada", "success");
+    else showAlert("Error al vaciar base de huellas", "error");
+  }
+/* funcion de eliminar la base de datos */
+async function confirmDeleteAllUsers() {
+  if (!requireSessionOrPrompt()) return;
+
+  if (!confirm("⚠️ PELIGRO ⚠️\n\n¿Eliminar TODOS los usuarios y asistencias?\n\nNO se puede deshacer.")) return;
+
+  showAlert("Eliminando usuarios y asistencias...", "info");
+
+  const result = await apiRequest("eliminar_todos_usuarios", "POST");
+
+  if (result && result.success) {
+    showAlert(result.message || "✅ Eliminado correctamente", "success");
+    addConsoleMessage("🗑️ Usuarios y asistencias eliminados (MySQL)", "success");
+
+    // refrescar UI
+    await loadUsers();
+    renderUsers();
+    renderQuickAccessUsers();
+    updateUserCount();
+    setFingerprintIdToFirstFree();
+  } else {
+    showAlert("❌ No se pudo eliminar (revisa consola)", "error");
+  }
+}
+  // ====================================================================
+  // CONSOLE
+  // ====================================================================
+  function addConsoleMessage(message, type = "info") {
+    const timestamp = new Date().toLocaleTimeString();
+    consoleMessages.push({ timestamp, message, type });
+    if (consoleMessages.length > 100) consoleMessages.shift();
+    updateConsoleDisplay();
+  }
+
+  function updateConsoleDisplay() {
+    const consoleEl = document.getElementById("console-log");
+    if (!consoleEl) return;
+    consoleEl.innerHTML = consoleMessages
+      .map(msg => `<div class="console-log-item ${msg.type}">[${msg.timestamp}] ${msg.message}</div>`)
+      .join("");
+    consoleEl.scrollTop = consoleEl.scrollHeight;
+  }
+
+  function showConsoleModal() {
+    document.getElementById("console-modal").classList.add("active");
+    updateConsoleDisplay();
+  }
+
+  function closeConsoleModal() {
+    document.getElementById("console-modal").classList.remove("active");
+  }
+
+  function clearConsole() {
+    consoleMessages = [];
+    updateConsoleDisplay();
+    addConsoleMessage("🗑️ Consola limpiada", "info");
+  }
+
+  // ====================================================================
+  // START
+  // ====================================================================
+  window.onload = init;
+
+  window.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") {
+      closeConsoleModal();
+      closeLoginModal();
+    }
+  });
+</script>
+  </body>
+</html>
